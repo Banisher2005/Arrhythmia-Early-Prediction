@@ -1,58 +1,118 @@
+"""
+ECG Dataset Loader
+
+Loads ECG recordings from the MIT-BIH Arrhythmia Database.
+
+Author:
+Abhinav Kumar
+
+Project:
+Arrhythmia Early Prediction using Deep Learning
+"""
+
 from pathlib import Path
+
 import pandas as pd
-import matplotlib.pyplot as plt
 
-# Project root folder
-BASE_DIR = Path(__file__).resolve().parent.parent
+from src.configs.config import ECG_LEAD, RAW_DATA_DIR
+from src.utils.logger import get_logger
 
-# Data folder
-DATA_DIR = BASE_DIR / "data" / "raw"
-
-print("Project Root:", BASE_DIR)
-print("Data Folder:", DATA_DIR)
-
-# Load ECG
-data = pd.read_csv(DATA_DIR / "100.csv")
-
-# Remove unwanted quotes from column names
-data.columns = data.columns.str.replace("'", "").str.strip()
-
-print("Columns:")
-print(data.columns)
-
-print("\nFirst Five Rows:")
-print(data.head())
-
-print("\nDataset Information:")
-print(data.info())
-
-# Plot ECG Signal
-
-plt.figure(figsize=(15,5))
-
-plt.plot(
-    data["MLII"][:3000],
-    color="blue",
-    linewidth=1
-)
-
-plt.title("ECG Signal - Record 100")
-plt.xlabel("Sample Number")
-plt.ylabel("Amplitude")
-plt.grid(True)
-
-plt.show()
+logger = get_logger(__name__)
 
 
-# Load Annotation File
+def load_ecg_record(record_id: int) -> pd.DataFrame:
+    """
+    Load a MIT-BIH ECG record.
 
-annotations = pd.read_csv(
-    DATA_DIR / "100annotations.txt",
-    sep=r"\s+"
-)
+    Parameters
+    ----------
+    record_id : int
+        MIT-BIH record number (e.g., 100, 101, 102).
 
-print("\nAnnotation Columns:")
-print(annotations.columns)
+    Returns
+    -------
+    pandas.DataFrame
+        ECG recording containing all available leads.
 
-print("\nFirst Five Annotation Rows:")
-print(annotations.head())
+    Raises
+    ------
+    FileNotFoundError
+        If the requested ECG record does not exist.
+    """
+
+    file_path = RAW_DATA_DIR / f"{record_id}.csv"
+
+    if not file_path.exists():
+        raise FileNotFoundError(
+            f"ECG record not found: {file_path}"
+        )
+
+    logger.info("Loading ECG record %s...", record_id)
+
+    ecg = pd.read_csv(file_path)
+
+    # Remove unwanted quotes and spaces from column names
+    ecg.columns = (
+        ecg.columns
+        .str.replace("'", "", regex=False)
+        .str.strip()
+    )
+
+    logger.info(
+        "ECG record %s loaded successfully (%d samples).",
+        record_id,
+        len(ecg),
+    )
+
+    return ecg
+
+
+def get_ecg_signal(
+    ecg: pd.DataFrame,
+    lead: str = ECG_LEAD
+) -> pd.Series:
+    """
+    Extract a specific ECG lead.
+
+    Parameters
+    ----------
+    ecg : pandas.DataFrame
+        Loaded ECG recording.
+
+    lead : str
+        ECG lead to extract.
+
+    Returns
+    -------
+    pandas.Series
+        ECG signal.
+    """
+
+    if lead not in ecg.columns:
+        raise ValueError(
+            f"Lead '{lead}' not found in ECG recording."
+        )
+
+    logger.info("Using ECG lead: %s", lead)
+
+    return ecg[lead]
+
+
+def main() -> None:
+    """
+    Example usage.
+    """
+
+    record_id = 100
+
+    ecg = load_ecg_record(record_id)
+
+    signal = get_ecg_signal(ecg)
+
+    logger.info("Dataset shape: %s", ecg.shape)
+
+    logger.info("Signal length: %d", len(signal))
+
+
+if __name__ == "__main__":
+    main()
