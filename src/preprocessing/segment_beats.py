@@ -1,111 +1,132 @@
-from pathlib import Path
-import pandas as pd
+"""
+Heartbeat Segmentation
+
+Extract heartbeat-centred ECG segments from filtered ECG signals.
+"""
+
 import numpy as np
 
-
-# Project Paths
-
-
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
-
-DATA_DIR = BASE_DIR / "data" / "raw"
-
-
-# Load ECG Signal
-
-
-ecg = pd.read_csv(DATA_DIR / "100.csv")
-
-ecg.columns = ecg.columns.str.replace("'", "").str.strip()
-
-signal = ecg["MLII"].values
-
-
-# Load Annotation File
-
-
-annotations = pd.read_csv(
-    DATA_DIR / "100annotations.txt",
-    sep=r"\s+"
+from src.configs.config import (
+    DEFAULT_RECORD,
+    WINDOW_BEFORE,
+    WINDOW_AFTER,
 )
 
+from src.preprocessing.filter_signal import preprocess_signal
+from src.preprocessing.load_annotations import load_annotations
+from src.preprocessing.load_dataset import load_ecg_signal
 
-# Parameters
+from src.utils.logger import get_logger
+from src.utils.types import (
+    AnnotationData,
+    BeatDataset,
+)
 
-
-WINDOW_BEFORE = 90
-WINDOW_AFTER = 90
-
-
-# Segment Beats
-
-
-beats = []
-labels = []
-
-for _, row in annotations.iterrows():
-
-    center = int(row["Sample"])
-
-    label = row["#"]
-
-    start = center - WINDOW_BEFORE
-    end = center + WINDOW_AFTER
-
-    # Ignore beats near beginning or end
-    if start < 0 or end >= len(signal):
-        continue
-
-    beat = signal[start:end]
-
-    beats.append(beat)
-
-    labels.append(label)
+logger = get_logger(__name__)
 
 
-# Convert to NumPy
+def segment_beats(
+    signal: np.ndarray,
+    annotations: AnnotationData,
+    record_id: int,
+    window_before: int = WINDOW_BEFORE,
+    window_after: int = WINDOW_AFTER,
+) -> BeatDataset:
+    """
+    Segment ECG into heartbeat-centred windows.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        Preprocessed ECG signal.
+
+    annotations : AnnotationData
+        Heartbeat annotation information.
+
+    record_id : int
+        MIT-BIH record number.
+
+    Returns
+    -------
+    BeatDataset
+        Segmented heartbeat dataset.
+    """
+
+    beats = []
+    labels = []
+    record_ids = []
+
+    window_size = window_before + window_after
+
+    for position, label in zip(
+        annotations.positions,
+        annotations.labels,
+    ):
+
+        start = position - window_before
+        end = position + window_after
+
+        if start < 0:
+            continue
+
+        if end > len(signal):
+            continue
+
+        beat = signal[start:end]
+
+        if beat.shape[0] != window_size:
+            continue
+
+        beats.append(beat)
+        labels.append(label)
+        record_ids.append(record_id)
+
+    dataset = BeatDataset(
+        beats=np.asarray(beats, dtype=np.float32),
+        labels=np.asarray(labels),
+        record_ids=np.asarray(record_ids, dtype=np.int32),
+    )
+
+    logger.info(
+        "Extracted %d heartbeat segments.",
+        len(dataset.beats),
+    )
+
+    return dataset
 
 
-beats = np.array(beats)
+def main() -> None:
+    """
+    Module test.
+    """
 
-labels = np.array(labels)
+    signal = load_ecg_signal(DEFAULT_RECORD)
+
+    signal = preprocess_signal(signal)
+
+    annotations = load_annotations(DEFAULT_RECORD)
+
+    dataset = segment_beats(
+        signal=signal,
+        annotations=annotations,
+        record_id=DEFAULT_RECORD,
+    )
+
+    logger.info(
+        "Beat dataset shape: %s",
+        dataset.beats.shape,
+    )
+
+    logger.info(
+        "Labels shape: %s",
+        dataset.labels.shape,
+    )
+
+    logger.info(
+        "Record IDs shape: %s",
+        dataset.record_ids.shape,
+    )
 
 
-# Display Information
-
-
-print("=" * 60)
-print("HEARTBEAT SEGMENTATION COMPLETED")
-print("=" * 60)
-
-print(f"\nTotal Beats: {len(beats)}")
-
-print(f"\nBeat Shape: {beats.shape}")
-
-print(f"\nLabels Shape: {labels.shape}")
-
-print("\nFirst Label:")
-
-print(labels[0])
-
-print("\nFirst Beat:")
-
-print(beats[0])
-
-print("\nLesson 4 Completed Successfully!")
-
-# ==========================================================
-# Save Processed Dataset
-# ==========================================================
-
-PROCESSED_DIR = BASE_DIR / "data" / "processed"
-
-PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-
-np.save(PROCESSED_DIR / "beats.npy", beats)
-
-np.save(PROCESSED_DIR / "labels.npy", labels)
-
-print("\nProcessed dataset saved successfully!")
-
-print(PROCESSED_DIR)
+if __name__ == "__main__":
+    main()

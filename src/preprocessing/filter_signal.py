@@ -1,28 +1,14 @@
 """
 ECG Signal Filtering
 
-Applies signal preprocessing techniques to ECG recordings
-from the MIT-BIH Arrhythmia Database.
-
-Author:
-Abhinav Kumar
-
-Project:
-Arrhythmia Early Prediction using Deep Learning
+Applies band-pass filtering and normalization to ECG signals.
 """
 
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.signal import butter, filtfilt
 
 from src.configs.config import (
     SAMPLING_RATE,
-    ECG_LEAD,
-)
-
-from src.preprocessing.load_dataset import (
-    load_ecg_record,
-    get_ecg_signal,
 )
 
 from src.utils.logger import get_logger
@@ -31,13 +17,32 @@ logger = get_logger(__name__)
 
 
 def butter_bandpass(
-    lowcut: float,
-    highcut: float,
-    sampling_rate: int,
+    lowcut: float = 0.5,
+    highcut: float = 40.0,
+    sampling_rate: int = SAMPLING_RATE,
     order: int = 4,
 ):
     """
-    Create a Butterworth bandpass filter.
+    Create Butterworth band-pass filter coefficients.
+
+    Parameters
+    ----------
+    lowcut : float
+        Lower cutoff frequency.
+
+    highcut : float
+        Upper cutoff frequency.
+
+    sampling_rate : int
+        ECG sampling frequency.
+
+    order : int
+        Filter order.
+
+    Returns
+    -------
+    tuple
+        Filter coefficients (b, a).
     """
 
     nyquist = 0.5 * sampling_rate
@@ -48,7 +53,7 @@ def butter_bandpass(
     b, a = butter(
         order,
         [low, high],
-        btype="band",
+        btype="bandpass",
     )
 
     return b, a
@@ -60,13 +65,22 @@ def filter_ecg(
     highcut: float = 40.0,
 ) -> np.ndarray:
     """
-    Apply Butterworth bandpass filtering.
+    Apply Butterworth band-pass filter.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        Raw ECG signal.
+
+    Returns
+    -------
+    np.ndarray
+        Filtered ECG signal.
     """
 
     b, a = butter_bandpass(
-        lowcut,
-        highcut,
-        SAMPLING_RATE,
+        lowcut=lowcut,
+        highcut=highcut,
     )
 
     filtered_signal = filtfilt(
@@ -75,77 +89,58 @@ def filter_ecg(
         signal,
     )
 
-    return filtered_signal
+    logger.info("Signal filtering completed.")
+
+    return filtered_signal.astype(np.float32)
 
 
 def normalize_signal(
     signal: np.ndarray,
 ) -> np.ndarray:
     """
-    Normalize ECG signal between 0 and 1.
+    Normalize ECG signal to the range [0, 1].
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        ECG signal.
+
+    Returns
+    -------
+    np.ndarray
+        Normalized ECG signal.
     """
 
-    signal = signal.astype(np.float32)
+    minimum = np.min(signal)
+    maximum = np.max(signal)
 
-    signal = (
-        signal - signal.min()
+    normalized_signal = (
+        signal - minimum
     ) / (
-        signal.max() - signal.min()
+        maximum - minimum
     )
 
-    return signal
+    logger.info("Signal normalization completed.")
+
+    return normalized_signal.astype(np.float32)
 
 
-def plot_signals(
-    original: np.ndarray,
-    filtered: np.ndarray,
-    samples: int = 2000,
-) -> None:
+def preprocess_signal(
+    signal: np.ndarray,
+) -> np.ndarray:
     """
-    Compare original and filtered ECG.
+    Complete preprocessing pipeline.
+
+    Parameters
+    ----------
+    signal : np.ndarray
+        Raw ECG signal.
+
+    Returns
+    -------
+    np.ndarray
+        Filtered and normalized ECG.
     """
-
-    plt.figure(figsize=(15, 5))
-
-    plt.plot(
-        original[:samples],
-        label="Original ECG",
-        alpha=0.7,
-    )
-
-    plt.plot(
-        filtered[:samples],
-        label="Filtered ECG",
-        linewidth=2,
-    )
-
-    plt.title("ECG Signal Filtering")
-
-    plt.xlabel("Sample")
-
-    plt.ylabel("Amplitude")
-
-    plt.legend()
-
-    plt.grid(True)
-
-    plt.tight_layout()
-
-    plt.show()
-
-
-def main() -> None:
-
-    record_id = 100
-
-    ecg = load_ecg_record(record_id)
-
-    signal = get_ecg_signal(
-        ecg,
-        ECG_LEAD,
-    ).to_numpy()
-
-    logger.info("Filtering ECG signal...")
 
     filtered_signal = filter_ecg(signal)
 
@@ -153,25 +148,23 @@ def main() -> None:
         filtered_signal
     )
 
-    logger.info(
-        "Original signal shape : %s",
-        signal.shape,
-    )
+    return normalized_signal
+
+
+def main() -> None:
+    """
+    Module test.
+    """
+
+    from src.preprocessing.load_dataset import load_ecg_signal
+
+    signal = load_ecg_signal()
+
+    processed_signal = preprocess_signal(signal)
 
     logger.info(
-        "Filtered signal shape : %s",
-        filtered_signal.shape,
-    )
-
-    logger.info(
-        "Normalized signal range : %.3f to %.3f",
-        normalized_signal.min(),
-        normalized_signal.max(),
-    )
-
-    plot_signals(
-        signal,
-        filtered_signal,
+        "Processed signal shape: %s",
+        processed_signal.shape,
     )
 
 

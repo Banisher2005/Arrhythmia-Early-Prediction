@@ -2,27 +2,29 @@
 ECG Annotation Loader
 
 Loads heartbeat annotations from the MIT-BIH Arrhythmia Database.
-
-Author:
-Abhinav Kumar
-
-Project:
-Arrhythmia Early Prediction using Deep Learning
 """
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from src.configs.config import RAW_DATA_DIR
+from src.configs.config import (
+    DEFAULT_RECORD,
+    RAW_DATA_DIR,
+)
+
 from src.utils.logger import get_logger
+from src.utils.types import AnnotationData
 
 logger = get_logger(__name__)
 
 
-def load_annotations(record_id: int) -> pd.DataFrame:
+def load_annotations(
+    record_id: int = DEFAULT_RECORD,
+) -> AnnotationData:
     """
-    Load annotation file corresponding to an ECG record.
+    Load heartbeat annotations for a MIT-BIH ECG record.
 
     Parameters
     ----------
@@ -31,13 +33,8 @@ def load_annotations(record_id: int) -> pd.DataFrame:
 
     Returns
     -------
-    pandas.DataFrame
-        Annotation dataframe.
-
-    Raises
-    ------
-    FileNotFoundError
-        If the annotation file does not exist.
+    AnnotationData
+        Heartbeat positions and labels.
     """
 
     file_path = RAW_DATA_DIR / f"{record_id}annotations.txt"
@@ -47,102 +44,86 @@ def load_annotations(record_id: int) -> pd.DataFrame:
             f"Annotation file not found: {file_path}"
         )
 
-    logger.info("Loading annotations for record %s...", record_id)
+    logger.info(
+        "Loading annotations for record %d...",
+        record_id,
+    )
 
-    annotations = pd.read_csv(
+    annotation_df = pd.read_csv(
         file_path,
         sep=r"\s+",
     )
 
-    logger.info(
-        "Loaded %d heartbeat annotations.",
-        len(annotations),
+    positions = annotation_df["Sample"].to_numpy(
+        dtype=np.int32
     )
 
-    return annotations
+    labels = annotation_df["#"].to_numpy()
 
+    logger.info(
+        "Loaded %d heartbeat annotations.",
+        len(positions),
+    )
 
-def get_beat_positions(
-    annotations: pd.DataFrame,
-) -> pd.Series:
-    """
-    Extract heartbeat sample locations.
-
-    Parameters
-    ----------
-    annotations : pandas.DataFrame
-
-    Returns
-    -------
-    pandas.Series
-    """
-
-    return annotations["Sample"]
-
-
-def get_beat_labels(
-    annotations: pd.DataFrame,
-) -> pd.Series:
-    """
-    Extract heartbeat labels.
-
-    Parameters
-    ----------
-    annotations : pandas.DataFrame
-
-    Returns
-    -------
-    pandas.Series
-    """
-
-    return annotations["#"]
+    return AnnotationData(
+        positions=positions,
+        labels=labels,
+    )
 
 
 def summarize_annotations(
-    annotations: pd.DataFrame,
+    annotations: AnnotationData,
 ) -> None:
     """
     Display annotation statistics.
 
     Parameters
     ----------
-    annotations : pandas.DataFrame
+    annotations : AnnotationData
+        Annotation information.
     """
 
-    logger.info("Annotation shape : %s", annotations.shape)
-
-    logger.info(
-        "Unique beat symbols : %s",
-        annotations["#"].unique(),
+    unique_labels, counts = np.unique(
+        annotations.labels,
+        return_counts=True,
     )
 
-    logger.info(
-        "Beat distribution:\n%s",
-        annotations["#"].value_counts(),
-    )
+    logger.info("Heartbeat Distribution")
+
+    for label, count in zip(
+        unique_labels,
+        counts,
+    ):
+        logger.info(
+            "%s : %d",
+            label,
+            count,
+        )
 
 
 def main() -> None:
+    """
+    Example usage.
+    """
 
-    record_id = 100
+    annotations = load_annotations()
 
-    annotations = load_annotations(record_id)
+    logger.info(
+        "Total beats: %d",
+        len(annotations.positions),
+    )
+
+    logger.info(
+        "First five positions: %s",
+        annotations.positions[:5],
+    )
+
+    logger.info(
+        "First five labels: %s",
+        annotations.labels[:5],
+    )
 
     summarize_annotations(annotations)
-
-    beat_positions = get_beat_positions(annotations)
-
-    beat_labels = get_beat_labels(annotations)
-
-    logger.info(
-        "First five beat positions:\n%s",
-        beat_positions.head(),
-    )
-
-    logger.info(
-        "First five beat labels:\n%s",
-        beat_labels.head(),
-    )
 
 
 if __name__ == "__main__":
