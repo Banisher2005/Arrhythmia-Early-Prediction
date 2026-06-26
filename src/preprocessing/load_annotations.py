@@ -7,13 +7,11 @@ Loads heartbeat annotations from the MIT-BIH Arrhythmia Database.
 from pathlib import Path
 
 import numpy as np
-import pandas as pd
 
 from src.configs.config import (
     DEFAULT_RECORD,
     RAW_DATA_DIR,
 )
-
 from src.utils.logger import get_logger
 from src.utils.types import AnnotationData
 
@@ -49,16 +47,71 @@ def load_annotations(
         record_id,
     )
 
-    annotation_df = pd.read_csv(
+    positions = []
+    labels = []
+
+    with open(
         file_path,
-        sep=r"\s+",
+        "r",
+        encoding="utf-8",
+        errors="replace",
+    ) as file:
+
+        # Skip header
+        next(file, None)
+
+        for line_number, line in enumerate(file, start=2):
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            parts = line.split()
+
+            # Expected format:
+            # Time Sample Symbol Sub Chan Num Aux
+            #
+            # Example:
+            # 0:00.050 18 N 0 0 0
+            #
+            # Record 214 also contains:
+            # 5:14.703 113293 " 0 0 0 TS
+            #
+            # Using split() avoids all CSV quoting issues.
+
+            if len(parts) < 3:
+                logger.warning(
+                    "Skipping malformed line %d in %s",
+                    line_number,
+                    file_path.name,
+                )
+                continue
+
+            try:
+                sample = int(parts[1])
+            except ValueError:
+                logger.warning(
+                    "Invalid sample index on line %d in %s",
+                    line_number,
+                    file_path.name,
+                )
+                continue
+
+            symbol = parts[2]
+
+            positions.append(sample)
+            labels.append(symbol)
+
+    positions = np.asarray(
+        positions,
+        dtype=np.int32,
     )
 
-    positions = annotation_df["Sample"].to_numpy(
-        dtype=np.int32
+    labels = np.asarray(
+        labels,
+        dtype=str,
     )
-
-    labels = annotation_df["#"].to_numpy()
 
     logger.info(
         "Loaded %d heartbeat annotations.",
@@ -123,7 +176,9 @@ def main() -> None:
         annotations.labels[:5],
     )
 
-    summarize_annotations(annotations)
+    summarize_annotations(
+        annotations,
+    )
 
 
 if __name__ == "__main__":

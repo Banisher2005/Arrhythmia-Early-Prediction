@@ -66,28 +66,24 @@ def load_ecg_signal(
     lead: str = ECG_LEAD,
 ) -> np.ndarray:
     """
-    Load a single ECG lead as a NumPy array.
+    Load an ECG signal.
 
-    Parameters
-    ----------
-    record_id : int
-        MIT-BIH record number.
-
-    lead : str
-        ECG lead to extract.
-
-    Returns
-    -------
-    numpy.ndarray
-        ECG signal.
+    If the requested lead is unavailable, automatically use
+    the first available ECG lead.
     """
 
     ecg = load_ecg_dataframe(record_id)
 
     if lead not in ecg.columns:
-        raise ValueError(
-            f"Lead '{lead}' not found in ECG record."
+
+        logger.warning(
+            "Lead '%s' not found for record %d. Using '%s' instead.",
+            lead,
+            record_id,
+            ecg.columns[1],
         )
+
+        lead = ecg.columns[1]
 
     signal = ecg[lead].to_numpy(dtype=np.float32)
 
