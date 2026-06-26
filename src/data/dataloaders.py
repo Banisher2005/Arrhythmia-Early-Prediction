@@ -9,6 +9,7 @@ from typing import Dict
 import torch
 from torch.utils.data import DataLoader
 
+from src.configs import config
 from src.data.heartbeat_dataset import HeartbeatDataset
 from src.utils.logger import get_logger
 
@@ -18,22 +19,16 @@ logger = get_logger(__name__)
 # Configuration
 # ==========================================================
 
-BATCH_SIZE = 256
-
-NUM_WORKERS = 4
-
-PIN_MEMORY = torch.cuda.is_available()
-
-PERSISTENT_WORKERS = NUM_WORKERS > 0
+PERSISTENT_WORKERS = config.NUM_WORKERS > 0
 
 # ==========================================================
 
 
 def create_dataloader(
     split: str,
-    batch_size: int = BATCH_SIZE,
+    batch_size: int = config.BATCH_SIZE,
     shuffle: bool = False,
-    num_workers: int = NUM_WORKERS,
+    num_workers: int = config.NUM_WORKERS,
 ) -> DataLoader:
     """
     Create a DataLoader for a dataset split.
@@ -41,6 +36,7 @@ def create_dataloader(
     Parameters
     ----------
     split : str
+        Dataset split.
         One of:
             - train
             - valid
@@ -58,6 +54,7 @@ def create_dataloader(
     Returns
     -------
     DataLoader
+        Configured PyTorch DataLoader.
     """
 
     dataset = HeartbeatDataset(split=split)
@@ -67,9 +64,12 @@ def create_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=PIN_MEMORY,
+        pin_memory=(
+            config.PIN_MEMORY
+            and torch.cuda.is_available()
+        ),
         persistent_workers=PERSISTENT_WORKERS,
-        drop_last=False,
+        drop_last=config.DROP_LAST,
     )
 
     logger.info(
@@ -82,39 +82,48 @@ def create_dataloader(
 
 
 def create_dataloaders(
-    batch_size: int = BATCH_SIZE,
-    num_workers: int = NUM_WORKERS,
+    batch_size: int = config.BATCH_SIZE,
+    num_workers: int = config.NUM_WORKERS,
 ) -> Dict[str, DataLoader]:
     """
-    Create train, validation and test DataLoaders.
+    Create DataLoaders for all dataset splits.
+
+    Parameters
+    ----------
+    batch_size : int
+        Mini-batch size.
+
+    num_workers : int
+        Number of worker processes.
+
+    Returns
+    -------
+    Dict[str, DataLoader]
+        Dictionary containing train, validation and test DataLoaders.
     """
 
-    train_loader = create_dataloader(
-        split="train",
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-    )
-
-    valid_loader = create_dataloader(
-        split="valid",
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-    )
-
-    test_loader = create_dataloader(
-        split="test",
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-    )
-
-    return {
-        "train": train_loader,
-        "valid": valid_loader,
-        "test": test_loader,
+    dataloaders = {
+        "train": create_dataloader(
+            split="train",
+            batch_size=batch_size,
+            shuffle=True,
+            num_workers=num_workers,
+        ),
+        "valid": create_dataloader(
+            split="valid",
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+        ),
+        "test": create_dataloader(
+            split="test",
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=num_workers,
+        ),
     }
+
+    return dataloaders
 
 
 def main() -> None:

@@ -23,8 +23,11 @@ logger = get_logger(__name__)
 # Configuration
 # ==========================================================
 
-RANDOM_SEED = 42
-VALIDATION_RATIO = 0.20
+from src.configs.config import (
+    PROCESSED_DATA_DIR,
+    RANDOM_SEED,
+    VALIDATION_RATIO,
+)
 
 # ----------------------------------------------------------
 # Official DS1 (Training Pool)
