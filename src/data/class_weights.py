@@ -1,10 +1,7 @@
 """
 Class Weight Computation
 
-Computes class weights from the TRAINING dataset only.
-
-These weights are used to compensate for severe class imbalance
-during model training.
+Computes normalized class weights for imbalanced heartbeat classification.
 """
 
 from typing import Dict
@@ -17,16 +14,16 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+MAX_WEIGHT = 25.0
+
 
 def compute_class_weights() -> torch.Tensor:
     """
-    Compute inverse-frequency class weights using only the
-    training dataset.
+    Compute normalized class weights.
 
     Returns
     -------
     torch.Tensor
-        Tensor containing one weight per class.
     """
 
     dataset = HeartbeatDataset(
@@ -41,23 +38,24 @@ def compute_class_weights() -> torch.Tensor:
     )
 
     total_samples = len(labels)
-
     num_classes = len(classes)
 
-    weights = (
-        total_samples
-        / (num_classes * counts)
+    weights = total_samples / (num_classes * counts)
+
+    # Normalize so average weight = 1
+    weights = weights / weights.mean()
+
+    # Prevent extreme values
+    weights = np.clip(
+        weights,
+        0.10,
+        MAX_WEIGHT,
     )
 
     weights = weights.astype(np.float32)
 
-    class_weights = torch.tensor(
-        weights,
-        dtype=torch.float32,
-    )
-
     logger.info("=" * 70)
-    logger.info("Training Class Distribution")
+    logger.info("Normalized Training Class Weights")
     logger.info("=" * 70)
 
     for cls, count, weight in zip(
@@ -74,18 +72,13 @@ def compute_class_weights() -> torch.Tensor:
 
     logger.info("=" * 70)
 
-    return class_weights
+    return torch.tensor(
+        weights,
+        dtype=torch.float32,
+    )
 
 
 def get_class_distribution() -> Dict[int, int]:
-    """
-    Return training class distribution.
-
-    Returns
-    -------
-    Dict[int, int]
-        Mapping from class index to sample count.
-    """
 
     dataset = HeartbeatDataset(
         split="train",
@@ -105,9 +98,6 @@ def get_class_distribution() -> Dict[int, int]:
 
 
 def main() -> None:
-    """
-    Example usage.
-    """
 
     weights = compute_class_weights()
 

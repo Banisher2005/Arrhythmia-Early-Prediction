@@ -24,8 +24,6 @@ class AMSRAN_GF(nn.Module):
     Adaptive Multi-Scale Residual Attention Network
     with Gated Feature Fusion.
 
-    Pipeline
-
     ECG
       ↓
     Residual CNN
@@ -73,20 +71,10 @@ class AMSRAN_GF(nn.Module):
         x: torch.Tensor,
     ) -> Dict[str, torch.Tensor]:
         """
-        Parameters
-        ----------
-        x
-            Shape:
-                (B,1,180)
-
-        Returns
-        -------
-        dict
+        Forward pass.
         """
 
-        cnn_features, gate_weights = self.feature_extractor(
-            x
-        )
+        cnn_features, gate_weights = self.feature_extractor(x)
 
         lstm_features = self.sequence_model(
             cnn_features
@@ -100,12 +88,14 @@ class AMSRAN_GF(nn.Module):
             context_vector
         )
 
+        probabilities = torch.softmax(
+            logits,
+            dim=1,
+        )
+
         return {
             "logits": logits,
-            "probabilities": torch.softmax(
-                logits,
-                dim=1,
-            ),
+            "probabilities": probabilities,
             "cnn_features": cnn_features,
             "lstm_features": lstm_features,
             "context_vector": context_vector,
@@ -175,14 +165,25 @@ def main() -> None:
             tuple(gate.shape),
         )
 
+        logger.info(
+            "Gate %d Channel-0 Weights : %s",
+            idx,
+            gate[0, :, 0]
+            .detach()
+            .cpu()
+            .numpy(),
+        )
+
     logger.info("")
+
+    prediction = torch.argmax(
+        outputs["probabilities"],
+        dim=1,
+    )
 
     logger.info(
         "Prediction : %s",
-        torch.argmax(
-            outputs["probabilities"],
-            dim=1,
-        ),
+        prediction,
     )
 
     logger.info("=" * 70)

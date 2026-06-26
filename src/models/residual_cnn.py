@@ -1,13 +1,7 @@
 """
 Residual CNN Backbone
 
-Stacks multiple Multi-Scale Residual Blocks to extract rich ECG
-representations before sequence modeling.
-
-Output:
-    (Batch, Sequence Length, Feature Dimension)
-
-This backbone is used by AMSRAN-GF.
+Uses stacked Multi-Scale Residual Blocks with learnable downsampling.
 """
 
 import torch
@@ -19,9 +13,46 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class DownsampleBlock(nn.Module):
+    """
+    Learnable downsampling block.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+    ) -> None:
+        super().__init__()
+
+        self.block = nn.Sequential(
+            nn.Conv1d(
+                channels,
+                channels,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+                bias=False,
+            ),
+            nn.BatchNorm1d(channels),
+            nn.ReLU(inplace=True),
+        )
+
+        nn.init.kaiming_normal_(
+            self.block[0].weight,
+            mode="fan_out",
+            nonlinearity="relu",
+        )
+
+    def forward(
+        self,
+        x: torch.Tensor,
+    ) -> torch.Tensor:
+        return self.block(x)
+
+
 class ResidualCNN(nn.Module):
     """
-    Multi-Scale Residual CNN Backbone.
+    Multi-Scale CNN Backbone.
     """
 
     def __init__(
@@ -33,31 +64,29 @@ class ResidualCNN(nn.Module):
         super().__init__()
 
         self.block1 = MultiScaleBlock(
-            in_channels=input_channels,
-            out_channels=32,
-            dropout=dropout,
+            input_channels,
+            32,
+            dropout,
         )
 
-        self.pool1 = nn.MaxPool1d(
-            kernel_size=2,
-            stride=2,
+        self.down1 = DownsampleBlock(
+            32,
         )
 
         self.block2 = MultiScaleBlock(
-            in_channels=32,
-            out_channels=64,
-            dropout=dropout,
+            32,
+            64,
+            dropout,
         )
 
-        self.pool2 = nn.MaxPool1d(
-            kernel_size=2,
-            stride=2,
+        self.down2 = DownsampleBlock(
+            64,
         )
 
         self.block3 = MultiScaleBlock(
-            in_channels=64,
-            out_channels=feature_dim,
-            dropout=dropout,
+            64,
+            feature_dim,
+            dropout,
         )
 
     def forward(
@@ -67,37 +96,21 @@ class ResidualCNN(nn.Module):
         torch.Tensor,
         list[torch.Tensor],
     ]:
-        """
-        Parameters
-        ----------
-        x
-            Shape:
-                (B,1,180)
 
-        Returns
-        -------
-        features
-            Shape:
-                (B,L,C)
-
-        gate_weights
-            Gate outputs from all blocks.
-        """
-
-        gate_outputs = []
+        gates = []
 
         x, gate = self.block1(x)
-        gate_outputs.append(gate)
+        gates.append(gate)
 
-        x = self.pool1(x)
+        x = self.down1(x)
 
         x, gate = self.block2(x)
-        gate_outputs.append(gate)
+        gates.append(gate)
 
-        x = self.pool2(x)
+        x = self.down2(x)
 
         x, gate = self.block3(x)
-        gate_outputs.append(gate)
+        gates.append(gate)
 
         x = x.permute(
             0,
@@ -105,13 +118,10 @@ class ResidualCNN(nn.Module):
             1,
         )
 
-        return x, gate_outputs
+        return x, gates
 
 
 def main() -> None:
-    """
-    Example usage.
-    """
 
     model = ResidualCNN()
 
@@ -138,12 +148,14 @@ def main() -> None:
             tuple(gate.shape),
         )
 
-        logger.info(
-            "Gate %d First Sample : %s",
-            i,
-            gate[0].detach().cpu().numpy(),
-        )
+    logger.info(
+        "First Block Channel0 Weights : %s",
+        gates[0][0, :, 0]
+        .detach()
+        .cpu()
+        .numpy(),
+    )
 
 
 if __name__ == "__main__":
-    main()
+    main()    

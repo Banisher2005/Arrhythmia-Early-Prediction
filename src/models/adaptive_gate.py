@@ -1,10 +1,10 @@
 """
-Adaptive Gated Feature Fusion
+Channel-wise Adaptive Gated Feature Fusion
 
-Learns the importance of each feature extraction branch for every ECG
-heartbeat.
+Novelty module of AMSRAN-GF.
 
-This module is the primary novelty of the AMSRAN-GF architecture.
+Learns, for every feature channel, how much importance to assign
+to each multi-scale residual branch.
 """
 
 import torch
@@ -17,24 +17,26 @@ logger = get_logger(__name__)
 
 class AdaptiveGate(nn.Module):
     """
-    Adaptive Gated Feature Fusion.
+    Channel-wise Adaptive Gated Feature Fusion.
 
-    Given multiple feature maps extracted using different receptive
-    fields, the gate learns a set of attention weights indicating
-    the importance of each branch.
+    Input
+    -----
+    List[Tensor]
+        3 tensors of shape (B, C, L)
 
-    Input:
-        List[Tensor]
-            [(B,C,L), (B,C,L), ...]
+    Output
+    ------
+    fused_features
+        (B, C, L)
 
-    Output:
-        Tensor
-            (B,C,L)
+    gate_weights
+        (B, 3, C)
     """
 
     def __init__(
         self,
         channels: int,
+        reduction: int = 16,
         num_branches: int = 3,
     ) -> None:
         super().__init__()
@@ -42,17 +44,19 @@ class AdaptiveGate(nn.Module):
         self.channels = channels
         self.num_branches = num_branches
 
-        self.global_pool = nn.AdaptiveAvgPool1d(1)
+        self.pool = nn.AdaptiveAvgPool1d(1)
 
-        self.gate = nn.Sequential(
+        hidden = max(channels // reduction, 4)
+
+        self.fc = nn.Sequential(
             nn.Linear(
                 channels * num_branches,
-                channels,
+                hidden,
             ),
             nn.ReLU(inplace=True),
             nn.Linear(
-                channels,
-                num_branches,
+                hidden,
+                channels * num_branches,
             ),
         )
 
@@ -68,15 +72,23 @@ class AdaptiveGate(nn.Module):
         for module in self.modules():
 
             if isinstance(module, nn.Linear):
-                nn.init.xavier_uniform_(module.weight)
+
+                nn.init.xavier_uniform_(
+                    module.weight
+                )
 
                 if module.bias is not None:
-                    nn.init.zeros_(module.bias)
+                    nn.init.zeros_(
+                        module.bias
+                    )
 
     def forward(
         self,
         features: list[torch.Tensor],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+    ]:
         """
         Parameters
         ----------
@@ -86,23 +98,20 @@ class AdaptiveGate(nn.Module):
         Returns
         -------
         fused_features
-            Weighted feature map.
+            (B,C,L)
 
         gate_weights
-            Branch weights.
-            Shape:
-                (batch_size, num_branches)
+            (B,3,C)
         """
 
         if len(features) != self.num_branches:
             raise ValueError(
-                f"Expected {self.num_branches} branches, "
-                f"received {len(features)}."
+                f"Expected {self.num_branches} branches."
             )
 
         pooled = [
-            self.global_pool(feature).squeeze(-1)
-            for feature in features
+            self.pool(f).squeeze(-1)
+            for f in features
         ]
 
         pooled = torch.cat(
@@ -110,58 +119,48 @@ class AdaptiveGate(nn.Module):
             dim=1,
         )
 
-        gate_weights = self.gate(pooled)
+        weights = self.fc(
+            pooled
+        )
 
-        gate_weights = self.softmax(gate_weights)
+        weights = weights.view(
+            -1,
+            self.num_branches,
+            self.channels,
+        )
 
-        fused = 0
+        weights = self.softmax(
+            weights
+        )
 
-        for i, feature in enumerate(features):
+        fused = torch.zeros_like(
+            features[0]
+        )
 
-            weight = gate_weights[:, i]
+        for i in range(self.num_branches):
 
-            weight = weight.unsqueeze(1).unsqueeze(2)
+            fused += (
+                weights[:, i]
+                .unsqueeze(-1)
+                * features[i]
+            )
 
-            fused = fused + weight * feature
-
-        return fused, gate_weights
+        return fused, weights
 
 
 def main() -> None:
-    """
-    Example usage.
-    """
 
     gate = AdaptiveGate(
         channels=64,
-        num_branches=3,
     )
 
-    branch1 = torch.randn(
-        8,
-        64,
-        180,
-    )
+    branches = [
+        torch.randn(8, 64, 180),
+        torch.randn(8, 64, 180),
+        torch.randn(8, 64, 180),
+    ]
 
-    branch2 = torch.randn(
-        8,
-        64,
-        180,
-    )
-
-    branch3 = torch.randn(
-        8,
-        64,
-        180,
-    )
-
-    fused, weights = gate(
-        [
-            branch1,
-            branch2,
-            branch3,
-        ]
-    )
+    fused, weights = gate(branches)
 
     logger.info(
         "Fused Shape : %s",
@@ -174,8 +173,11 @@ def main() -> None:
     )
 
     logger.info(
-        "First Sample Weights : %s",
-        weights[0].detach().cpu().numpy(),
+        "Sample Weights (Channel 0): %s",
+        weights[0, :, 0]
+        .detach()
+        .cpu()
+        .numpy(),
     )
 
 

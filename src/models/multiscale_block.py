@@ -1,10 +1,8 @@
 """
 Multi-Scale Residual Feature Extraction Block
 
-Runs three parallel residual branches with different kernel sizes
-and fuses them using the Adaptive Gated Feature Fusion module.
-
-This module forms the core feature extractor of AMSRAN-GF.
+Three parallel residual branches followed by
+Channel-wise Adaptive Gated Feature Fusion.
 """
 
 import torch
@@ -19,13 +17,7 @@ logger = get_logger(__name__)
 
 class MultiScaleBlock(nn.Module):
     """
-    Multi-scale residual feature extraction.
-
-    Input
-        (B, C, L)
-
-    Output
-        (B, C_out, L)
+    Multi-scale feature extraction block.
     """
 
     def __init__(
@@ -59,30 +51,15 @@ class MultiScaleBlock(nn.Module):
 
         self.gate = AdaptiveGate(
             channels=out_channels,
-            num_branches=3,
         )
 
     def forward(
         self,
         x: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Parameters
-        ----------
-        x : torch.Tensor
-            Shape:
-                (B, C, L)
-
-        Returns
-        -------
-        fused_features
-            Shape:
-                (B, C_out, L)
-
-        gate_weights
-            Shape:
-                (B, 3)
-        """
+    ) -> tuple[
+        torch.Tensor,
+        torch.Tensor,
+    ]:
 
         feature3 = self.branch3(x)
 
@@ -102,9 +79,6 @@ class MultiScaleBlock(nn.Module):
 
 
 def main() -> None:
-    """
-    Example usage.
-    """
 
     model = MultiScaleBlock(
         in_channels=1,
@@ -117,7 +91,7 @@ def main() -> None:
         180,
     )
 
-    fused, weights = model(x)
+    fused, gate = model(x)
 
     logger.info(
         "Input Shape : %s",
@@ -131,12 +105,15 @@ def main() -> None:
 
     logger.info(
         "Gate Shape : %s",
-        tuple(weights.shape),
+        tuple(gate.shape),
     )
 
     logger.info(
-        "First Sample Gate : %s",
-        weights[0].detach().cpu().numpy(),
+        "Channel 0 Weights : %s",
+        gate[0, :, 0]
+        .detach()
+        .cpu()
+        .numpy(),
     )
 
 
