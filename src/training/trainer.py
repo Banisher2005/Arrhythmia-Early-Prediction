@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
-from torch.cuda.amp import GradScaler, autocast
+from torch.amp import GradScaler, autocast
 from tqdm import tqdm
 
 from src.training.early_stopping import EarlyStopping
@@ -46,8 +46,9 @@ class Trainer:
         self.epochs = epochs
 
         self.scaler = GradScaler(
-            enabled=device.type == "cuda"
-        )
+    "cuda",
+    enabled=self.device.type == "cuda",
+)
 
         self.save_dir = Path(save_dir)
 
@@ -94,8 +95,9 @@ class Trainer:
             self.optimizer.zero_grad()
 
             with autocast(
-                enabled=self.device.type == "cuda"
-            ):
+    "cuda",
+    enabled=self.device.type == "cuda",
+):
 
                 outputs = self.model(signal)
 
