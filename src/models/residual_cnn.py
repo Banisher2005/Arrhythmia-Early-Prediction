@@ -94,6 +94,7 @@ class ResidualCNN(nn.Module):
         x: torch.Tensor,
     ) -> tuple[
         torch.Tensor,
+        torch.Tensor,
         list[torch.Tensor],
     ]:
 
@@ -112,13 +113,19 @@ class ResidualCNN(nn.Module):
         x, gate = self.block3(x)
         gates.append(gate)
 
+        # Feature map before permutation.
+        # Shape: (B, C, L)
+        cnn_feature_map = x
+
+        # Sequence representation for BiLSTM.
+        # Shape: (B, L, C)
         x = x.permute(
             0,
             2,
             1,
         )
 
-        return x, gates
+        return x, cnn_feature_map, gates
 
 
 def main() -> None:
@@ -131,11 +138,16 @@ def main() -> None:
         180,
     )
 
-    features, gates = model(x)
+    features, feature_map, gates = model(x)
 
     logger.info(
         "CNN Output Shape : %s",
         tuple(features.shape),
+    )
+
+    logger.info(
+        "CNN Feature Map Shape : %s",
+        tuple(feature_map.shape),
     )
 
     for i, gate in enumerate(
@@ -158,4 +170,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()    
+    main()

@@ -101,7 +101,7 @@ INPUT_LENGTH = SEGMENT_LENGTH
 # Checkpointing
 # ==========================================================
 
-BEST_MODEL_NAME = "best_model.pth"
+BEST_MODEL_NAME = "best_model.pt"
 
 LAST_MODEL_NAME = "last_model.pth"
 

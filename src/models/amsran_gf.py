@@ -74,7 +74,11 @@ class AMSRAN_GF(nn.Module):
         Forward pass.
         """
 
-        cnn_features, gate_weights = self.feature_extractor(x)
+        (
+            cnn_features,
+            cnn_feature_map,
+            gate_weights,
+        ) = self.feature_extractor(x)
 
         lstm_features = self.sequence_model(
             cnn_features
@@ -97,6 +101,7 @@ class AMSRAN_GF(nn.Module):
             "logits": logits,
             "probabilities": probabilities,
             "cnn_features": cnn_features,
+            "cnn_feature_map": cnn_feature_map,
             "lstm_features": lstm_features,
             "context_vector": context_vector,
             "attention_weights": attention_weights,
@@ -136,6 +141,11 @@ def main() -> None:
     logger.info(
         "CNN Features : %s",
         tuple(outputs["cnn_features"].shape),
+    )
+
+    logger.info(
+        "CNN Feature Map : %s",
+        tuple(outputs["cnn_feature_map"].shape),
     )
 
     logger.info(
