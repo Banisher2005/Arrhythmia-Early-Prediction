@@ -6,7 +6,6 @@ Creates optimized DataLoaders for the MIT-BIH heartbeat dataset.
 
 from typing import Dict
 
-import torch
 from torch.utils.data import DataLoader
 
 from src.configs import config
@@ -64,10 +63,7 @@ def create_dataloader(
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=num_workers,
-        pin_memory=(
-            config.PIN_MEMORY
-            and torch.cuda.is_available()
-        ),
+        pin_memory=config.PIN_MEMORY,
         persistent_workers=PERSISTENT_WORKERS,
         drop_last=config.DROP_LAST,
     )
@@ -86,23 +82,10 @@ def create_dataloaders(
     num_workers: int = config.NUM_WORKERS,
 ) -> Dict[str, DataLoader]:
     """
-    Create DataLoaders for all dataset splits.
-
-    Parameters
-    ----------
-    batch_size : int
-        Mini-batch size.
-
-    num_workers : int
-        Number of worker processes.
-
-    Returns
-    -------
-    Dict[str, DataLoader]
-        Dictionary containing train, validation and test DataLoaders.
+    Create DataLoaders for train, validation and test datasets.
     """
 
-    dataloaders = {
+    return {
         "train": create_dataloader(
             split="train",
             batch_size=batch_size,
@@ -122,8 +105,6 @@ def create_dataloaders(
             num_workers=num_workers,
         ),
     }
-
-    return dataloaders
 
 
 def main() -> None:
