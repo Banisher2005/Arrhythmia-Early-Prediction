@@ -26,6 +26,10 @@ MODELS_DIR = PROJECT_ROOT / "models_saved"
 
 GRAPHS_DIR = PROJECT_ROOT / "graphs"
 
+REPORTS_DIR = RESULTS_DIR / "reports"
+
+PREDICTIONS_DIR = RESULTS_DIR / "predictions"
+
 # ==========================================================
 # MIT-BIH Dataset
 # ==========================================================

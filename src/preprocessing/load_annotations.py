@@ -18,6 +18,52 @@ from src.utils.types import AnnotationData
 logger = get_logger(__name__)
 
 
+def parse_annotation_lines(
+    lines,
+) -> AnnotationData:
+    """
+    Parse MIT-BIH annotation text lines into sample positions and labels.
+    """
+
+    positions = []
+    labels = []
+
+    for line_number, line in enumerate(lines, start=1):
+
+        line = line.strip()
+
+        if not line:
+            continue
+
+        parts = line.split()
+
+        if len(parts) < 3:
+            logger.warning(
+                "Skipping malformed annotation line %d",
+                line_number,
+            )
+            continue
+
+        try:
+            sample = int(parts[1])
+        except ValueError:
+            if line_number == 1:
+                continue
+            logger.warning(
+                "Invalid sample index on annotation line %d",
+                line_number,
+            )
+            continue
+
+        positions.append(sample)
+        labels.append(parts[2])
+
+    return AnnotationData(
+        positions=np.asarray(positions, dtype=np.int32),
+        labels=np.asarray(labels, dtype=str),
+    )
+
+
 def load_annotations(
     record_id: int = DEFAULT_RECORD,
 ) -> AnnotationData:
@@ -47,81 +93,20 @@ def load_annotations(
         record_id,
     )
 
-    positions = []
-    labels = []
-
     with open(
         file_path,
         "r",
         encoding="utf-8",
         errors="replace",
     ) as file:
-
-        # Skip header
-        next(file, None)
-
-        for line_number, line in enumerate(file, start=2):
-
-            line = line.strip()
-
-            if not line:
-                continue
-
-            parts = line.split()
-
-            # Expected format:
-            # Time Sample Symbol Sub Chan Num Aux
-            #
-            # Example:
-            # 0:00.050 18 N 0 0 0
-            #
-            # Record 214 also contains:
-            # 5:14.703 113293 " 0 0 0 TS
-            #
-            # Using split() avoids all CSV quoting issues.
-
-            if len(parts) < 3:
-                logger.warning(
-                    "Skipping malformed line %d in %s",
-                    line_number,
-                    file_path.name,
-                )
-                continue
-
-            try:
-                sample = int(parts[1])
-            except ValueError:
-                logger.warning(
-                    "Invalid sample index on line %d in %s",
-                    line_number,
-                    file_path.name,
-                )
-                continue
-
-            symbol = parts[2]
-
-            positions.append(sample)
-            labels.append(symbol)
-
-    positions = np.asarray(
-        positions,
-        dtype=np.int32,
-    )
-
-    labels = np.asarray(
-        labels,
-        dtype=str,
-    )
+        annotations = parse_annotation_lines(file)
 
     logger.info(
         "Loaded %d heartbeat annotations.",
-        len(positions),
+        len(annotations.positions),
     )
 
-    return AnnotationData(
-        positions=positions,
-        labels=labels,
-    )
+    return annotations
 
 
 def summarize_annotations(
